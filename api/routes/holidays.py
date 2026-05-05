@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path
 
 from schemas.models import HolidayRequest, HolidayResponse
 from services.analytics_service import hourly_rate
-from store.memory_store import store
+from store.sqlite_store import store
 
 router = APIRouter()
 

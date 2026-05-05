@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from core.config import settings as cfg
 from schemas.models import UserSettings, UserSettingsResponse
 from services.analytics_service import hourly_rate
-from store.memory_store import store
+from store.sqlite_store import store
 
 router = APIRouter()
 

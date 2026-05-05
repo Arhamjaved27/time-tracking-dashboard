@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from schemas.models import MonthlySummary, ProgressRing
 from services.analytics_service import build_monthly_summary, build_progress_ring
-from store.memory_store import store
+from store.sqlite_store import store
 
 router = APIRouter()
 

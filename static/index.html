@@ -407,9 +407,41 @@ async function checkBackend() {
   try {
     const base = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
     const resp = await fetch(base + '/health');
-    setApiBanner(resp.ok);
+    const online = resp.ok;
+    setApiBanner(online);
+    if (online) {
+      await loadBackendState();
+    }
   } catch {
     setApiBanner(false);
+  }
+}
+
+async function loadBackendState() {
+  try {
+    const [settingsResp, logsResp, holidaysResp] = await Promise.all([
+      fetch(API_BASE + '/settings/'),
+      fetch(API_BASE + '/logs/'),
+      fetch(API_BASE + '/holidays/'),
+    ]);
+
+    if (!settingsResp.ok || !logsResp.ok || !holidaysResp.ok) return;
+
+    const settings = await settingsResp.json();
+    const logs = await logsResp.json();
+    const holidays = await holidaysResp.json();
+
+    state.settings = settings;
+    state.logs = {};
+    logs.forEach(entry => { state.logs[entry.log_date] = entry; });
+    state.holidays = {};
+    holidays.forEach(entry => { state.holidays[entry.holiday_date] = entry; });
+
+    persist();
+    renderAll();
+    loadLogIntoForm();
+  } catch (e) {
+    console.warn('Failed to load backend state', e);
   }
 }
 
@@ -526,10 +558,19 @@ function saveSettings() {
   renderSettings();
   renderAll();
   showToast('Settings saved');
-  // Try API sync (fire and forget)
+
   fetch(API_BASE + '/settings/', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ monthly_salary_pkr: salary, cycle_start_date: cycle }) })
-    .catch(()=>{});
+    .then(async resp => {
+      if (!resp.ok) return;
+      const json = await resp.json();
+      state.settings = json;
+      persist();
+      renderSettings();
+      renderAll();
+      setApiBanner(true);
+    })
+    .catch(() => {});
 }
 function renderSettings() {
   if (!state.settings) return;
@@ -567,19 +608,23 @@ function saveLog() {
   persist();
   renderAll();
   showToast('Log saved');
-  // API
+
   fetch(API_BASE + '/logs/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
     log_date: key, work_hours: wH, work_minutes: wM, break_hours: bH, break_minutes: bM, notes
-  })}).catch(()=>{});
+  })})
+  .then(async resp => {
+    if (!resp.ok) return;
+    const json = await resp.json();
+    state.logs[json.log_date] = json;
+    persist();
+    renderAll();
+    setApiBanner(true);
+  })
+  .catch(() => {});
 }
 function deleteLog() {
   const key = dateKey(state.currentDate);
-  if (!state.logs[key]) return;
-  delete state.logs[key];
-  persist();
-  renderAll();
-  loadLogIntoForm();
-  showToast('Log deleted');
+  deleteRecord(key);
 }
 function deleteRecord(dateStr) {
   if (!state.logs[dateStr]) return;
@@ -590,6 +635,14 @@ function deleteRecord(dateStr) {
     loadLogIntoForm();
   }
   showToast('Record deleted');
+
+  fetch(API_BASE + '/logs/' + dateStr, { method:'DELETE' })
+    .then(resp => {
+      if (resp.ok) {
+        setApiBanner(true);
+      }
+    })
+    .catch(() => {});
 }
 function loadLogIntoForm() {
   const key = dateKey(state.currentDate);
@@ -624,6 +677,16 @@ function markHoliday() {
   loadLogIntoForm();
   renderCurrentDate();
   showToast('Marked as holiday');
+
+  fetch(API_BASE + '/holidays/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ holiday_date: key, label: 'Paid Holiday' }) })
+    .then(async resp => {
+      if (!resp.ok) return;
+      const json = await resp.json();
+      state.holidays[key] = json;
+      persist();
+      setApiBanner(true);
+    })
+    .catch(() => {});
 }
 
 function computeMonthlyTarget(cycleStart) {
@@ -792,6 +855,14 @@ function removeHoliday(dateStr) {
   persist();
   renderAll();
   showToast('Holiday removed');
+
+  fetch(API_BASE + '/holidays/' + dateStr, { method:'DELETE' })
+    .then(resp => {
+      if (resp.ok) {
+        setApiBanner(true);
+      }
+    })
+    .catch(() => {});
 }
 
 function renderQuickStats(sum) {
@@ -818,6 +889,7 @@ async function syncWithApi() {
       return;
     }
     setApiBanner(true);
+    await loadBackendState();
     showToast('Synced with API');
   } catch {
     setApiBanner(false);

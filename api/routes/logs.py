@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path
 
 from schemas.models import LogEntryRequest, LogEntryResponse
 from services.analytics_service import compute_log_entry
-from store.memory_store import store
+from store.sqlite_store import store
 
 router = APIRouter()
 
