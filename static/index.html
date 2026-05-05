@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShiftGlass Pro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --glass-bg: rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.14);
+    --accent: #6ee7b7;
+    --accent2: #818cf8;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Syne', sans-serif;
+    background: #0a0f1e;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  /* Ambient background orbs */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.25;
+    z-index: 0;
+    pointer-events: none;
+  }
+  body::before {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, #6ee7b7, #0a0f1e);
+    top: -150px; left: -150px;
+  }
+  body::after {
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, #818cf8, #0a0f1e);
+    bottom: -100px; right: -100px;
+  }
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 20px;
+  }
+  .glass-sm { border-radius: 12px; }
+  .mono { font-family: 'DM Mono', monospace; }
+  input[type="number"], input[type="date"], input[type="text"] {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.9rem;
+    width: 100%;
+    outline: none;
+    transition: border-color .2s;
+  }
+  input:focus { border-color: var(--accent); }
+  .btn {
+    padding: 10px 22px;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border: none;
+    transition: transform .15s, opacity .15s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #0a0f1e; }
+  .btn-secondary { background: var(--accent2); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+  }
+  label { font-size: 0.78rem; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; display: block; }
+
+  /* Progress ring */
+  .ring-track { stroke: rgba(255,255,255,0.08); }
+  .ring-fill { transition: stroke-dashoffset 0.8s ease, stroke 0.4s; stroke-linecap: round; }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--accent); color: #0a0f1e;
+    padding: 12px 28px; border-radius: 40px;
+    font-weight: 700; font-size: 0.85rem;
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .35s;
+    opacity: 0; z-index: 9999; pointer-events: none;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  /* Day chip */
+  .day-chip {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: .05em;
+  }
+  .chip-regular  { background: rgba(110,231,183,0.15); color: var(--accent); }
+  .chip-friday   { background: rgba(129,140,248,0.15); color: var(--accent2); }
+  .chip-sunday   { background: rgba(251,191,36,0.15);  color: var(--warn); }
+  .chip-holiday  { background: rgba(248,113,113,0.15); color: var(--danger); }
+
+  /* Responsive grid */
+  .main-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 768px) { .main-grid { grid-template-columns: 340px 1fr; } }
+  @media (min-width: 1100px) { .main-grid { grid-template-columns: 360px 1fr 280px; } }
+
+  .fade-in { animation: fadeIn .4s ease both; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body class="relative z-10">
+
+<!-- ─── Toast ─────────────────────────────────────────────────── -->
+<div id="toast">✓ Saved</div>
+
+<!-- ─── Header ────────────────────────────────────────────────── -->
+<header class="glass" style="border-radius:0; border-left:none; border-right:none; border-top:none; padding:18px 28px; position:sticky; top:0; z-index:100;">
+  <div style="max-width:1280px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div style="width:38px; height:38px; background:var(--accent); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+        <i class="fa-solid fa-clock" style="color:#0a0f1e; font-size:1rem;"></i>
+      </div>
+      <div>
+        <div style="font-size:1.15rem; font-weight:800; letter-spacing:-.02em;">ShiftGlass <span style="color:var(--accent);">Pro</span></div>
+        <div class="mono" style="font-size:0.7rem; color:var(--muted);">Work Analytics Dashboard</div>
+      </div>
+    </div>
+    <!-- Date navigator -->
+    <div style="display:flex; align-items:center; gap:10px;">
+      <button class="btn btn-ghost" onclick="navigateDate(-1)"><i class="fa-solid fa-chevron-left"></i></button>
+      <div id="currentDateDisplay" style="font-size:0.9rem; font-weight:600; min-width:140px; text-align:center;"></div>
+      <button class="btn btn-ghost" onclick="navigateDate(1)"><i class="fa-solid fa-chevron-right"></i></button>
+      <button class="btn btn-ghost" onclick="goToday()"><i class="fa-solid fa-calendar-day"></i> Today</button>
+    </div>
+  </div>
+</header>
+
+<!-- ─── Main ──────────────────────────────────────────────────── -->
+<main style="max-width:1280px; margin:0 auto; padding:28px 20px;">
+
+  <!-- API status banner -->
+  <div id="apiBanner" class="glass glass-sm fade-in" style="padding:14px 20px; margin-bottom:20px; display:flex; align-items:center; gap:12px; color:var(--warn);">
+    <i class="fa-solid fa-triangle-exclamation"></i>
+    <span style="font-size:0.85rem;">Running in <strong>local mode</strong> — data saved to localStorage. Start the FastAPI server for full backend sync.</span>
+    <button class="btn btn-ghost" style="margin-left:auto; padding:6px 14px; font-size:0.78rem;" onclick="syncWithApi()"><i class="fa-solid fa-rotate"></i> Sync API</button>
+  </div>
+
+  <div class="main-grid">
+
+    <!-- ─── LEFT: Settings + Log Entry ─────────────────────────── -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <!-- Settings Card -->
+      <div class="glass fade-in" style="padding:24px;">
+        <div style="font-size:0.8rem; color:var(--accent); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:18px;">
+          <i class="fa-solid fa-gear"></i> Settings
+        </div>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <label>Monthly Salary (PKR)</label>
+            <input type="number" id="settingSalary" placeholder="e.g. 85000" min="0" />
+          </div>
+          <div>
+            <label>Cycle Start Date</label>
+            <input type="date" id="settingCycleStart" />
+          </div>
+          <button class="btn btn-primary" style="width:100%;" onclick="saveSettings()">
+            <i class="fa-solid fa-floppy-disk"></i> Save Settings
+          </button>
+        </div>
+        <!-- Derived rate -->
+        <div id="hourlyRateDisplay" class="glass glass-sm" style="margin-top:16px; padding:12px 16px; display:none;">
+          <div style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;">Hourly Rate</div>
+          <div class="mono" style="font-size:1.5rem; font-weight:500; color:var(--accent);" id="hourlyRateValue">—</div>
+          <div style="font-size:0.72rem; color:var(--muted);">based on 26-day / 8-hr month</div>
+        </div>
+      </div>
+
+      <!-- Log Entry Card -->
+      <div class="glass fade-in" style="padding:24px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+          <div style="font-size:0.8rem; color:var(--accent2); font-weight:700; letter-spacing:.1em; text-transform:uppercase;">
+            <i class="fa-solid fa-pen-to-square"></i> Log Entry
+          </div>
+          <span id="dayTypeChip" class="day-chip chip-regular">Regular</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <label>Work Time</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div><input type="number" id="workHours" placeholder="Hours" min="0" max="23" /></div>
+              <div><input type="number" id="workMinutes" placeholder="Mins" min="0" max="59" /></div>
+            </div>
+          </div>
+          <div>
+            <label>Break Time</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+              <div><input type="number" id="breakHours" placeholder="Hours" min="0" max="23" /></div>
+              <div><input type="number" id="breakMinutes" placeholder="Mins" min="0" max="59" /></div>
+            </div>
+          </div>
+          <div>
+            <label>Notes (optional)</label>
+            <input type="text" id="logNotes" placeholder="e.g. Client call, deep work…" />
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <button class="btn btn-secondary" onclick="saveLog()"><i class="fa-solid fa-save"></i> Save</button>
+            <button class="btn btn-danger" onclick="deleteLog()"><i class="fa-solid fa-trash"></i> Delete</button>
+          </div>
+          <button class="btn btn-ghost" style="width:100%;" onclick="markHoliday()">
+            <i class="fa-solid fa-umbrella-beach"></i> Mark as Paid Holiday
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /left -->
+
+    <!-- ─── CENTER: Dashboard ────────────────────────────────────── -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <!-- KPI Row -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(170px,1fr)); gap:16px;" class="fade-in">
+        <!-- Earnings -->
+        <div class="glass glass-sm" style="padding:20px;">
+          <div style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;"><i class="fa-solid fa-money-bill-wave"></i> Est. Earnings</div>
+          <div class="mono" style="font-size:1.6rem; font-weight:500; color:var(--accent);" id="kpiEarnings">₨ 0</div>
+          <div style="font-size:0.72rem; color:var(--muted);" id="kpiEarningsSub">this cycle</div>
+        </div>
+        <!-- Hours Worked -->
+        <div class="glass glass-sm" style="padding:20px;">
+          <div style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;"><i class="fa-solid fa-hourglass-half"></i> Total Worked</div>
+          <div class="mono" style="font-size:1.6rem; font-weight:500; color:var(--accent2);" id="kpiWorked">0.00 h</div>
+          <div style="font-size:0.72rem; color:var(--muted);" id="kpiWorkedSub">net (excl. breaks)</div>
+        </div>
+        <!-- Target -->
+        <div class="glass glass-sm" style="padding:20px;">
+          <div style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;"><i class="fa-solid fa-bullseye"></i> Target</div>
+          <div class="mono" style="font-size:1.6rem; font-weight:500; color:var(--warn);" id="kpiTarget">0.00 h</div>
+          <div style="font-size:0.72rem; color:var(--muted);">monthly goal</div>
+        </div>
+        <!-- Delta -->
+        <div class="glass glass-sm" style="padding:20px;">
+          <div style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;"><i class="fa-solid fa-gauge-high"></i> Ahead / Behind</div>
+          <div class="mono" style="font-size:1.6rem; font-weight:500;" id="kpiDelta">0.00 h</div>
+          <div style="font-size:0.72rem; color:var(--muted);" id="kpiDeltaSub">vs target</div>
+        </div>
+      </div>
+
+      <!-- Progress Ring + Today -->
+      <div class="glass fade-in" style="padding:28px; display:flex; flex-wrap:wrap; gap:28px; align-items:center;">
+        <!-- SVG Ring -->
+        <div style="position:relative; flex-shrink:0;">
+          <svg width="160" height="160" viewBox="0 0 160 160">
+            <circle class="ring-track" cx="80" cy="80" r="68" fill="none" stroke-width="10"/>
+            <circle class="ring-fill" id="ringFill"
+              cx="80" cy="80" r="68" fill="none" stroke-width="10"
+              stroke="var(--accent)"
+              stroke-dasharray="427.26"
+              stroke-dashoffset="427.26"
+              transform="rotate(-90 80 80)"/>
+          </svg>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+            <div class="mono" style="font-size:1.5rem; font-weight:500;" id="ringPercent">0%</div>
+            <div style="font-size:0.7rem; color:var(--muted);">complete</div>
+          </div>
+        </div>
+        <!-- Ring details -->
+        <div style="flex:1; min-width:180px;">
+          <div style="font-size:1.1rem; font-weight:700; margin-bottom:6px;" id="ringStatus">—</div>
+          <div style="font-size:0.82rem; color:var(--muted); margin-bottom:18px;" id="ringDetail">Log your first entry to begin tracking.</div>
+          <!-- Today mini-summary -->
+          <div style="font-size:0.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px;">Today's Entry</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;" id="todaySummary">
+            <div class="glass glass-sm" style="padding:10px 14px;">
+              <div style="font-size:0.68rem; color:var(--muted);">Worked</div>
+              <div class="mono" id="todayWorked">—</div>
+            </div>
+            <div class="glass glass-sm" style="padding:10px 14px;">
+              <div style="font-size:0.68rem; color:var(--muted);">Break</div>
+              <div class="mono" id="todayBreak">—</div>
+            </div>
+            <div class="glass glass-sm" style="padding:10px 14px;">
+              <div style="font-size:0.68rem; color:var(--muted);">Earnings</div>
+              <div class="mono" id="todayEarnings">—</div>
+            </div>
+            <div class="glass glass-sm" style="padding:10px 14px;">
+              <div style="font-size:0.68rem; color:var(--muted);">Delta</div>
+              <div class="mono" id="todayDelta">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log Table -->
+      <div class="glass fade-in" style="padding:24px; overflow:hidden;">
+        <div style="font-size:0.8rem; color:var(--accent); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px;">
+          <i class="fa-solid fa-table-list"></i> Log History
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+            <thead>
+              <tr style="color:var(--muted); text-align:left;">
+                <th style="padding:8px 12px; font-weight:600; font-size:0.72rem; text-transform:uppercase; letter-spacing:.06em;">Date</th>
+                <th style="padding:8px 12px;">Type</th>
+                <th style="padding:8px 12px;">Worked</th>
+                <th style="padding:8px 12px;">Break</th>
+                <th style="padding:8px 12px;">Net</th>
+                <th style="padding:8px 12px;">Target</th>
+                <th style="padding:8px 12px;">Δ</th>
+                <th style="padding:8px 12px;">Earnings</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody">
+              <tr><td colspan="8" style="padding:20px; text-align:center; color:var(--muted);">No logs yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /center -->
+
+    <!-- ─── RIGHT: Holidays ──────────────────────────────────────── -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="glass fade-in" style="padding:24px;">
+        <div style="font-size:0.8rem; color:var(--danger); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:18px;">
+          <i class="fa-solid fa-umbrella-beach"></i> Paid Holidays
+        </div>
+        <div id="holidayList" style="display:flex; flex-direction:column; gap:10px;">
+          <div style="font-size:0.82rem; color:var(--muted); text-align:center; padding:20px 0;">No holidays marked.</div>
+        </div>
+      </div>
+      <!-- Quick stats -->
+      <div class="glass fade-in" style="padding:24px;">
+        <div style="font-size:0.8rem; color:var(--warn); font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px;">
+          <i class="fa-solid fa-chart-pie"></i> Quick Stats
+        </div>
+        <div style="display:flex; flex-direction:column; gap:12px;" id="quickStats">
+          <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
+            <span style="color:var(--muted);">Days Logged</span>
+            <span class="mono" id="qsDaysLogged">0</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
+            <span style="color:var(--muted);">OT Days</span>
+            <span class="mono" id="qsOtDays">0</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
+            <span style="color:var(--muted);">Total Break</span>
+            <span class="mono" id="qsBreak">0h</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
+            <span style="color:var(--muted);">Avg Daily</span>
+            <span class="mono" id="qsAvgDaily">—</span>
+          </div>
+          <div style="height:1px; background:var(--glass-border); margin:4px 0;"></div>
+          <div style="display:flex; justify-content:space-between; font-size:0.82rem;">
+            <span style="color:var(--muted);">Salary</span>
+            <span class="mono" id="qsSalary">—</span>
+          </div>
+        </div>
+      </div>
+    </div><!-- /right -->
+
+  </div><!-- /main-grid -->
+</main>
+
+<!-- ─── JavaScript ────────────────────────────────────────────── -->
+<script>
+const API_BASE = '/api/v1';
+
+// ── State ─────────────────────────────────────────────────────
+let state = {
+  settings: null,     // { monthly_salary_pkr, cycle_start_date, hourly_rate_pkr }
+  logs: {},           // "YYYY-MM-DD" → log object
+  holidays: {},       // "YYYY-MM-DD" → holiday object
+  currentDate: new Date(),
+};
+
+// ── Persistence (localStorage) ────────────────────────────────
+function persist() {
+  localStorage.setItem('sgp_state', JSON.stringify({
+    settings: state.settings,
+    logs: state.logs,
+    holidays: state.holidays,
+  }));
+}
+function hydrate() {
+  try {
+    const raw = localStorage.getItem('sgp_state');
+    if (raw) {
+      const saved = JSON.parse(raw);
+      state.settings = saved.settings || null;
+      state.logs     = saved.logs     || {};
+      state.holidays = saved.holidays || {};
+    }
+  } catch(e) {}
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function dateKey(d) {
+  return d.toISOString().split('T')[0];
+}
+function toDecimal(h, m) {
+  return Math.round((+(h||0) + (+(m||0))/60) * 100) / 100;
+}
+function getDayType(d) {
+  const wd = d.getDay(); // 0=Sun,5=Fri
+  const key = dateKey(d);
+  if (state.holidays[key]) return 'holiday';
+  if (wd === 5) return 'friday';
+  if (wd === 0) return 'sunday';
+  return 'regular';
+}
+function targetHours(dayType) {
+  if (dayType === 'friday')  return 7;
+  if (dayType === 'sunday')  return 0;
+  if (dayType === 'holiday') return 0;
+  return 8;
+}
+function hourlyRate() {
+  if (!state.settings) return 0;
+  return state.settings.monthly_salary_pkr / (26 * 8);
+}
+function historicalAvg() {
+  const nets = Object.values(state.logs).map(l => l.net_decimal);
+  if (!nets.length) return 8;
+  return Math.round(nets.reduce((a,b)=>a+b,0) / nets.length * 100) / 100;
+}
+function fmtPKR(v) {
+  return '₨ ' + v.toLocaleString('en-PK', {maximumFractionDigits:0});
+}
+function fmtHr(v) {
+  return v.toFixed(2) + ' h';
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function showToast(msg='Saved') {
+  const t = document.getElementById('toast');
+  t.textContent = '✓ ' + msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── Date Navigation ───────────────────────────────────────────
+function navigateDate(dir) {
+  state.currentDate = new Date(state.currentDate);
+  state.currentDate.setDate(state.currentDate.getDate() + dir);
+  renderCurrentDate();
+  loadLogIntoForm();
+}
+function goToday() {
+  state.currentDate = new Date();
+  renderCurrentDate();
+  loadLogIntoForm();
+}
+function renderCurrentDate() {
+  const d = state.currentDate;
+  const dayType = getDayType(d);
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  document.getElementById('currentDateDisplay').textContent =
+    dayNames[d.getDay()] + ', ' + d.toLocaleDateString('en-PK', {day:'2-digit',month:'short',year:'numeric'});
+  // Day chip
+  const chipMap = { regular:'chip-regular', friday:'chip-friday', sunday:'chip-sunday', holiday:'chip-holiday' };
+  const labelMap = { regular:'Regular · 8h', friday:'Friday · 7h', sunday:'Sunday OT', holiday:'Paid Holiday' };
+  const chip = document.getElementById('dayTypeChip');
+  chip.className = 'day-chip ' + (chipMap[dayType]||'chip-regular');
+  chip.textContent = labelMap[dayType] || dayType;
+}
+
+// ── Settings ──────────────────────────────────────────────────
+function saveSettings() {
+  const salary = parseFloat(document.getElementById('settingSalary').value);
+  const cycle  = document.getElementById('settingCycleStart').value;
+  if (!salary || !cycle) { alert('Fill in both salary and cycle start date.'); return; }
+  state.settings = {
+    monthly_salary_pkr: salary,
+    cycle_start_date: cycle,
+    hourly_rate_pkr: Math.round(salary / (26*8) * 100) / 100,
+  };
+  persist();
+  renderSettings();
+  renderAll();
+  showToast('Settings saved');
+  // Try API sync (fire and forget)
+  fetch(API_BASE + '/settings/', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ monthly_salary_pkr: salary, cycle_start_date: cycle }) })
+    .catch(()=>{});
+}
+function renderSettings() {
+  if (!state.settings) return;
+  document.getElementById('settingSalary').value    = state.settings.monthly_salary_pkr;
+  document.getElementById('settingCycleStart').value = state.settings.cycle_start_date;
+  const rd = document.getElementById('hourlyRateDisplay');
+  rd.style.display = 'block';
+  document.getElementById('hourlyRateValue').textContent = fmtPKR(state.settings.hourly_rate_pkr) + ' / hr';
+}
+
+// ── Log Entry ─────────────────────────────────────────────────
+function saveLog() {
+  if (!state.settings) { alert('Set your salary and cycle start first.'); return; }
+  const key    = dateKey(state.currentDate);
+  const wH     = +document.getElementById('workHours').value   || 0;
+  const wM     = +document.getElementById('workMinutes').value || 0;
+  const bH     = +document.getElementById('breakHours').value  || 0;
+  const bM     = +document.getElementById('breakMinutes').value|| 0;
+  const notes  = document.getElementById('logNotes').value;
+  const dayType  = getDayType(state.currentDate);
+  const workDec  = toDecimal(wH, wM);
+  const breakDec = toDecimal(bH, bM);
+  const netDec   = Math.max(workDec - breakDec, 0);
+  const target   = targetHours(dayType);
+  const delta    = Math.round((netDec - target) * 100) / 100;
+  const earnings = Math.round(netDec * hourlyRate() * 100) / 100;
+
+  state.logs[key] = {
+    log_date: key, day_type: dayType,
+    work_decimal: workDec, break_decimal: breakDec,
+    net_decimal: Math.round(netDec*100)/100,
+    target_hours: target, delta_hours: delta,
+    earnings_pkr: earnings, notes
+  };
+  persist();
+  renderAll();
+  showToast('Log saved');
+  // API
+  fetch(API_BASE + '/logs/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+    log_date: key, work_hours: wH, work_minutes: wM, break_hours: bH, break_minutes: bM, notes
+  })}).catch(()=>{});
+}
+function deleteLog() {
+  const key = dateKey(state.currentDate);
+  if (!state.logs[key]) return;
+  delete state.logs[key];
+  persist();
+  renderAll();
+  loadLogIntoForm();
+  showToast('Log deleted');
+}
+function loadLogIntoForm() {
+  const key = dateKey(state.currentDate);
+  const entry = state.logs[key];
+  if (entry) {
+    const wh = Math.floor(entry.work_decimal);
+    const wm = Math.round((entry.work_decimal - wh)*60);
+    const bh = Math.floor(entry.break_decimal);
+    const bm = Math.round((entry.break_decimal - bh)*60);
+    document.getElementById('workHours').value   = wh;
+    document.getElementById('workMinutes').value = wm;
+    document.getElementById('breakHours').value  = bh;
+    document.getElementById('breakMinutes').value= bm;
+    document.getElementById('logNotes').value    = entry.notes || '';
+  } else {
+    ['workHours','workMinutes','breakHours','breakMinutes','logNotes'].forEach(id =>
+      document.getElementById(id).value = '');
+  }
+  renderCurrentDate();
+}
+
+// ── Holidays ──────────────────────────────────────────────────
+function markHoliday() {
+  const key = dateKey(state.currentDate);
+  if (state.holidays[key]) { showToast('Already a holiday'); return; }
+  state.holidays[key] = { holiday_date: key, label: 'Paid Holiday', historical_avg_hours: historicalAvg() };
+  persist();
+  renderAll();
+  renderCurrentDate();
+  showToast('Marked as holiday');
+}
+
+// ── Analytics ─────────────────────────────────────────────────
+function computeSummary() {
+  const s = state.settings;
+  if (!s) return null;
+  let totalWorked=0, totalBreak=0, totalTarget=0, totalEarn=0, otDays=0;
+  const cycleStart = new Date(s.cycle_start_date + 'T00:00:00');
+  const now = new Date(); now.setHours(23,59,59);
+  const avg = historicalAvg();
+  const rate = s.monthly_salary_pkr / (26*8);
+
+  Object.values(state.logs).forEach(e => {
+    totalWorked += e.net_decimal;
+    totalBreak  += e.break_decimal;
+    totalTarget += e.target_hours;
+    totalEarn   += e.earnings_pkr;
+    if (e.day_type === 'sunday') otDays++;
+  });
+  Object.values(state.holidays).forEach(h => {
+    totalWorked += avg;
+    totalEarn   += avg * rate;
+  });
+
+  const progress = totalTarget > 0 ? Math.min(100, Math.round(totalWorked/totalTarget*100*10)/10) : 0;
+  const delta = Math.round((totalWorked - totalTarget)*100)/100;
+  return {
+    totalWorked: Math.round(totalWorked*100)/100,
+    totalBreak:  Math.round(totalBreak*100)/100,
+    totalTarget: Math.round(totalTarget*100)/100,
+    totalEarn:   Math.round(totalEarn*100)/100,
+    delta, progress, otDays,
+    daysLogged: Object.keys(state.logs).length,
+    holidays: Object.keys(state.holidays).length,
+  };
+}
+
+// ── Render All ────────────────────────────────────────────────
+function renderAll() {
+  renderCurrentDate();
+  renderSettings();
+  const sum = computeSummary();
+  renderKPIs(sum);
+  renderRing(sum);
+  renderToday();
+  renderTable();
+  renderHolidayList();
+  renderQuickStats(sum);
+}
+
+function renderKPIs(sum) {
+  if (!sum) return;
+  document.getElementById('kpiEarnings').textContent = fmtPKR(sum.totalEarn);
+  document.getElementById('kpiWorked').textContent   = fmtHr(sum.totalWorked);
+  document.getElementById('kpiTarget').textContent   = fmtHr(sum.totalTarget);
+  const deltaEl = document.getElementById('kpiDelta');
+  deltaEl.textContent = (sum.delta >= 0 ? '+' : '') + fmtHr(sum.delta);
+  deltaEl.style.color = sum.delta >= 0 ? 'var(--accent)' : 'var(--danger)';
+}
+
+function renderRing(sum) {
+  if (!sum) return;
+  const pct = sum.progress;
+  const circumference = 427.26;
+  const offset = circumference - (pct / 100) * circumference;
+  const fill = document.getElementById('ringFill');
+  fill.style.strokeDashoffset = offset;
+  fill.style.stroke = sum.delta >= 0 ? 'var(--accent)' : (sum.delta < -2 ? 'var(--danger)' : 'var(--warn)');
+  document.getElementById('ringPercent').textContent = pct + '%';
+  const status = sum.delta > 0 ? '🟢 Ahead of Schedule' : sum.delta < 0 ? '🔴 Behind Schedule' : '🟡 On Track';
+  document.getElementById('ringStatus').textContent = status;
+  document.getElementById('ringDetail').textContent =
+    Math.abs(sum.delta).toFixed(2) + 'h ' + (sum.delta >= 0 ? 'ahead' : 'behind') + ' target this cycle.';
+}
+
+function renderToday() {
+  const key   = dateKey(state.currentDate);
+  const entry = state.logs[key];
+  const isHol = !!state.holidays[key];
+  const set = (id, val) => document.getElementById(id).textContent = val;
+  if (isHol) {
+    set('todayWorked',   historicalAvg().toFixed(2) + 'h (avg)');
+    set('todayBreak',    '—');
+    set('todayEarnings', fmtPKR(historicalAvg() * hourlyRate()));
+    set('todayDelta',    '—');
+  } else if (entry) {
+    set('todayWorked',   fmtHr(entry.net_decimal));
+    set('todayBreak',    fmtHr(entry.break_decimal));
+    set('todayEarnings', fmtPKR(entry.earnings_pkr));
+    const dEl = document.getElementById('todayDelta');
+    dEl.textContent = (entry.delta_hours>=0?'+':'')+fmtHr(entry.delta_hours);
+    dEl.style.color = entry.delta_hours>=0?'var(--accent)':'var(--danger)';
+  } else {
+    ['todayWorked','todayBreak','todayEarnings','todayDelta'].forEach(id=>set(id,'—'));
+  }
+}
+
+function renderTable() {
+  const tbody = document.getElementById('logTableBody');
+  const entries = Object.values(state.logs).sort((a,b)=>a.log_date<b.log_date?1:-1);
+  if (!entries.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--muted)">No logs yet.</td></tr>';
+    return;
+  }
+  const chipMap = { regular:'chip-regular', friday:'chip-friday', sunday:'chip-sunday', holiday:'chip-holiday' };
+  tbody.innerHTML = entries.map(e => `
+    <tr style="border-top:1px solid var(--glass-border); cursor:pointer;" onclick="jumpToDate('${e.log_date}')">
+      <td style="padding:10px 12px;" class="mono">${e.log_date}</td>
+      <td style="padding:10px 12px;"><span class="day-chip ${chipMap[e.day_type]||'chip-regular'}">${e.day_type}</span></td>
+      <td style="padding:10px 12px;" class="mono">${fmtHr(e.work_decimal)}</td>
+      <td style="padding:10px 12px;" class="mono">${fmtHr(e.break_decimal)}</td>
+      <td style="padding:10px 12px;" class="mono">${fmtHr(e.net_decimal)}</td>
+      <td style="padding:10px 12px;" class="mono">${fmtHr(e.target_hours)}</td>
+      <td style="padding:10px 12px; color:${e.delta_hours>=0?'var(--accent)':'var(--danger)'};" class="mono">${(e.delta_hours>=0?'+':'')+fmtHr(e.delta_hours)}</td>
+      <td style="padding:10px 12px; color:var(--accent);" class="mono">${fmtPKR(e.earnings_pkr)}</td>
+    </tr>`).join('');
+}
+
+function jumpToDate(dateStr) {
+  state.currentDate = new Date(dateStr + 'T00:00:00');
+  loadLogIntoForm();
+}
+
+function renderHolidayList() {
+  const container = document.getElementById('holidayList');
+  const hols = Object.values(state.holidays).sort((a,b)=>a.holiday_date<b.holiday_date?-1:1);
+  if (!hols.length) {
+    container.innerHTML = '<div style="font-size:0.82rem;color:var(--muted);text-align:center;padding:20px 0;">No holidays marked.</div>';
+    return;
+  }
+  container.innerHTML = hols.map(h => `
+    <div class="glass glass-sm" style="padding:12px 14px; display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div class="mono" style="font-size:0.82rem;">${h.holiday_date}</div>
+        <div style="font-size:0.7rem;color:var(--muted);">${h.label||'Paid Holiday'}</div>
+      </div>
+      <button class="btn btn-danger" style="padding:5px 10px;font-size:0.72rem;" onclick="removeHoliday('${h.holiday_date}')">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>`).join('');
+}
+
+function removeHoliday(dateStr) {
+  delete state.holidays[dateStr];
+  persist();
+  renderAll();
+  showToast('Holiday removed');
+}
+
+function renderQuickStats(sum) {
+  if (!sum) return;
+  document.getElementById('qsDaysLogged').textContent = sum.daysLogged;
+  document.getElementById('qsOtDays').textContent     = sum.otDays;
+  document.getElementById('qsBreak').textContent      = fmtHr(sum.totalBreak);
+  const avg = sum.daysLogged > 0 ? (sum.totalWorked / sum.daysLogged).toFixed(2) + 'h' : '—';
+  document.getElementById('qsAvgDaily').textContent   = avg;
+  document.getElementById('qsSalary').textContent     = state.settings ? fmtPKR(state.settings.monthly_salary_pkr) : '—';
+}
+
+// ── API Sync ──────────────────────────────────────────────────
+async function syncWithApi() {
+  try {
+    const resp = await fetch(API_BASE + '/analytics/summary');
+    if (!resp.ok) { showToast('API unavailable'); return; }
+    showToast('Synced with API');
+  } catch { showToast('API not reachable'); }
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+hydrate();
+renderAll();
+loadLogIntoForm();
+</script>
+</body>
+</html>
