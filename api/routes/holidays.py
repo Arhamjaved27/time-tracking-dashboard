@@ -27,6 +27,9 @@ def add_holiday(payload: HolidayRequest):
     The historical average hours from logged days will be used to credit
     earnings for this holiday.
     """
+    # Remove any existing log for this day so the holiday becomes the authoritative record.
+    store.delete_log(payload.holiday_date)
+
     avg = _historical_avg()
     data = {
         "holiday_date": payload.holiday_date,

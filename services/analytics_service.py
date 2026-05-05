@@ -85,7 +85,8 @@ def build_monthly_summary(
     holidays: list[dict],         # raw dicts from in-memory store
 ) -> MonthlySummary:
     rate          = hourly_rate(monthly_salary)
-    cycle_end     = _last_day_of_cycle(cycle_start)
+    today         = date.today()
+    cutoff        = today  # Always up to today
 
     # Build a date → log map
     log_map: dict[date, dict] = {e["log_date"]: e for e in log_entries}
@@ -103,7 +104,7 @@ def build_monthly_summary(
     daily_list    = []
 
     d = cycle_start
-    while d <= cycle_end:
+    while d <= cutoff:
         day_type = DayType.HOLIDAY if d in holiday_dates else get_day_type(d)
         target   = target_hours_for_type(day_type) if day_type != DayType.HOLIDAY else 0.0
 
@@ -113,14 +114,15 @@ def build_monthly_summary(
             delta    = 0.0
             break_dec = 0.0
         elif d in log_map:
-            e        = log_map[d]
-            net_dec  = e["net_decimal"]
+            e         = log_map[d]
+            net_dec   = e["net_decimal"]
             break_dec = e["break_decimal"]
-            earnings = round(net_dec * rate, 2)
-            delta    = round(net_dec - target, 2)
+            earnings  = round(net_dec * rate, 2)
+            delta     = round(net_dec - target, 2)
         else:
+            total_target += target
             d += timedelta(days=1)
-            continue  # future / unlogged day — skip
+            continue  # unlogged workday / future day still contributes to monthly target
 
         if day_type == DayType.SUNDAY:
             ot_days += 1

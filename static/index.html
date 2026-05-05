@@ -151,13 +151,13 @@
 </header>
 
 <!-- ─── Main ──────────────────────────────────────────────────── -->
-<main style="max-width:1280px; margin:0 auto; padding:28px 20px;">
+<main style="max-width:1680px; margin:0 auto; padding:28px 20px;">
 
   <!-- API status banner -->
   <div id="apiBanner" class="glass glass-sm fade-in" style="padding:14px 20px; margin-bottom:20px; display:flex; align-items:center; gap:12px; color:var(--warn);">
-    <i class="fa-solid fa-triangle-exclamation"></i>
-    <span style="font-size:0.85rem;">Running in <strong>local mode</strong> — data saved to localStorage. Start the FastAPI server for full backend sync.</span>
-    <button class="btn btn-ghost" style="margin-left:auto; padding:6px 14px; font-size:0.78rem;" onclick="syncWithApi()"><i class="fa-solid fa-rotate"></i> Sync API</button>
+    <i id="apiBannerIcon" class="fa-solid fa-triangle-exclamation"></i>
+    <span id="apiBannerText" style="font-size:0.85rem;">Running in <strong>local mode</strong> — data saved to localStorage. Start the FastAPI server for full backend sync.</span>
+    <button id="apiSyncButton" class="btn btn-ghost" style="margin-left:auto; padding:6px 14px; font-size:0.78rem;" onclick="syncWithApi()"><i class="fa-solid fa-rotate"></i> Sync API</button>
   </div>
 
   <div class="main-grid">
@@ -323,10 +323,11 @@
                 <th style="padding:8px 12px;">Target</th>
                 <th style="padding:8px 12px;">Δ</th>
                 <th style="padding:8px 12px;">Earnings</th>
+                <th style="padding:8px 12px;">Action</th>
               </tr>
             </thead>
             <tbody id="logTableBody">
-              <tr><td colspan="8" style="padding:20px; text-align:center; color:var(--muted);">No logs yet.</td></tr>
+              <tr><td colspan="9" style="padding:20px; text-align:center; color:var(--muted);">No logs yet.</td></tr>
             </tbody>
           </table>
         </div>
@@ -380,7 +381,37 @@
 
 <!-- ─── JavaScript ────────────────────────────────────────────── -->
 <script>
-const API_BASE = '/api/v1';
+const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000/api/v1' : '/api/v1';
+let backendOnline = false;
+
+function setApiBanner(online) {
+  backendOnline = online;
+  const banner = document.getElementById('apiBanner');
+  const textEl = document.getElementById('apiBannerText');
+  const icon = document.getElementById('apiBannerIcon');
+  const button = document.getElementById('apiSyncButton');
+
+  if (online) {
+    banner.style.color = 'var(--accent)';
+    icon.className = 'fa-solid fa-cloud-check';
+    textEl.innerHTML = 'Connected to the FastAPI backend — data will sync with the server when available.';
+  } else {
+    banner.style.color = 'var(--warn)';
+    icon.className = 'fa-solid fa-triangle-exclamation';
+    textEl.innerHTML = 'Running in <strong>local mode</strong> — data saved to localStorage. Start the FastAPI server for full backend sync.';
+  }
+  button.innerHTML = '<i class="fa-solid fa-rotate"></i> Sync API';
+}
+
+async function checkBackend() {
+  try {
+    const base = window.location.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
+    const resp = await fetch(base + '/health');
+    setApiBanner(resp.ok);
+  } catch {
+    setApiBanner(false);
+  }
+}
 
 // ── State ─────────────────────────────────────────────────────
 let state = {
@@ -550,6 +581,16 @@ function deleteLog() {
   loadLogIntoForm();
   showToast('Log deleted');
 }
+function deleteRecord(dateStr) {
+  if (!state.logs[dateStr]) return;
+  delete state.logs[dateStr];
+  persist();
+  renderAll();
+  if (dateKey(state.currentDate) === dateStr) {
+    loadLogIntoForm();
+  }
+  showToast('Record deleted');
+}
 function loadLogIntoForm() {
   const key = dateKey(state.currentDate);
   const entry = state.logs[key];
@@ -574,27 +615,47 @@ function loadLogIntoForm() {
 function markHoliday() {
   const key = dateKey(state.currentDate);
   if (state.holidays[key]) { showToast('Already a holiday'); return; }
+  if (state.logs[key]) {
+    delete state.logs[key];
+  }
   state.holidays[key] = { holiday_date: key, label: 'Paid Holiday', historical_avg_hours: historicalAvg() };
   persist();
   renderAll();
+  loadLogIntoForm();
   renderCurrentDate();
   showToast('Marked as holiday');
+}
+
+function computeMonthlyTarget(cycleStart) {
+  const start = new Date(cycleStart + 'T00:00:00');
+  const today = new Date();
+  const cutoff = today; // Always up to today
+  const holidayKeys = new Set(Object.keys(state.holidays));
+  let total = 0;
+
+  for (let d = new Date(start); d <= cutoff; d.setDate(d.getDate() + 1)) {
+    const key = dateKey(d);
+    if (holidayKeys.has(key)) continue;
+    const wd = d.getDay();
+    if (wd === 0) continue; // Sunday is OT, not required target
+    total += wd === 5 ? 7 : 8;
+  }
+
+  return total;
 }
 
 // ── Analytics ─────────────────────────────────────────────────
 function computeSummary() {
   const s = state.settings;
   if (!s) return null;
-  let totalWorked=0, totalBreak=0, totalTarget=0, totalEarn=0, otDays=0;
-  const cycleStart = new Date(s.cycle_start_date + 'T00:00:00');
-  const now = new Date(); now.setHours(23,59,59);
+  let totalWorked=0, totalBreak=0, totalEarn=0, otDays=0;
+  const totalTarget = computeMonthlyTarget(s.cycle_start_date);
   const avg = historicalAvg();
   const rate = s.monthly_salary_pkr / (26*8);
 
   Object.values(state.logs).forEach(e => {
     totalWorked += e.net_decimal;
     totalBreak  += e.break_decimal;
-    totalTarget += e.target_hours;
     totalEarn   += e.earnings_pkr;
     if (e.day_type === 'sunday') otDays++;
   });
@@ -694,6 +755,11 @@ function renderTable() {
       <td style="padding:10px 12px;" class="mono">${fmtHr(e.target_hours)}</td>
       <td style="padding:10px 12px; color:${e.delta_hours>=0?'var(--accent)':'var(--danger)'};" class="mono">${(e.delta_hours>=0?'+':'')+fmtHr(e.delta_hours)}</td>
       <td style="padding:10px 12px; color:var(--accent);" class="mono">${fmtPKR(e.earnings_pkr)}</td>
+      <td style="padding:10px 12px;">
+        <button class="btn btn-danger" style="padding:6px 10px; font-size:0.75rem;" onclick="event.stopPropagation(); deleteRecord('${e.log_date}')">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </td>
     </tr>`).join('');
 }
 
@@ -742,13 +808,26 @@ function renderQuickStats(sum) {
 async function syncWithApi() {
   try {
     const resp = await fetch(API_BASE + '/analytics/summary');
-    if (!resp.ok) { showToast('API unavailable'); return; }
+    if (!resp.ok) {
+      if (resp.status === 400) {
+        setApiBanner(true);
+        showToast('Backend connected, no settings yet');
+        return;
+      }
+      showToast('API unavailable');
+      return;
+    }
+    setApiBanner(true);
     showToast('Synced with API');
-  } catch { showToast('API not reachable'); }
+  } catch {
+    setApiBanner(false);
+    showToast('API not reachable');
+  }
 }
 
 // ── Boot ──────────────────────────────────────────────────────
 hydrate();
+checkBackend();
 renderAll();
 loadLogIntoForm();
 </script>
