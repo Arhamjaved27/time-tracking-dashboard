@@ -85,6 +85,7 @@ def build_monthly_summary(
     holidays: list[dict],         # raw dicts from in-memory store
 ) -> MonthlySummary:
     rate          = hourly_rate(monthly_salary)
+    cycle_end     = _last_day_of_cycle(cycle_start)  # For reference, not used
     today         = date.today()
     cutoff        = today  # Always up to today
 
